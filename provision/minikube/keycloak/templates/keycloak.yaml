@@ -121,9 +121,12 @@ spec:
                 if [ ! -e /otel/opentelemetry-javaagent-{{ .Values.otelVersion }}.jar ]; then
                   curl -f -L https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/{{ .Values.otelVersion }}/opentelemetry-javaagent.jar -o /otel/opentelemetry-javaagent-{{ .Values.otelVersion }}.jar
                 fi
+                cp /otel/opentelemetry-javaagent-{{ .Values.otelVersion }}.jar /otel-empty-dir/
             volumeMounts:
               - name: otel
                 mountPath: /otel
+              - name: otel-empty-dir
+                mountPath: /otel-empty-dir
         {{ end }}
         containers:
           -
@@ -220,7 +223,7 @@ spec:
                 readOnly: true
 {{ end }}
 {{ if .Values.otel }}
-              - name: otel
+              - name: otel-empty-dir
                 mountPath: /otel
                 readOnly: true
 {{ end }}
@@ -244,6 +247,9 @@ spec:
           - name: otel
             persistentVolumeClaim:
               claimName: otel
+          - name: otel-empty-dir
+            emptyDir:
+              sizeLimit: 100Mi
 {{ end }}
 {{ if eq .Values.database "cockroach-operator" }}
           - name: client-certs
