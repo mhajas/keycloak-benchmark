@@ -76,6 +76,23 @@ spec:
       value: hotrod
     - name: storage-deployment-state-version-seed
       value: some-secret-seed
+{{ else if eq .Values.storage "legacy+hotrod" }}
+    - name: storage-area-auth-session
+      value: hotrod
+    - name: storage-auth-session-provider
+      value: map
+    - name: storage-area-user-session
+      value: hotrod
+    - name: storage-user-session-provider
+      value: map
+    - name: storage-area-single-use-object
+      value: hotrod
+    - name: storage-single-use-object-provider
+      value: map
+    - name: storage-area-login-failure
+      value: hotrod
+    - name: storage-login-failure-provider
+      value: map
 {{ else if ne .Values.storage "" }}
     - name: storage
       value: {{ quote .Values.storage }}
@@ -131,6 +148,10 @@ spec:
             imagePullPolicy: Never
 {{ end }}
             env:
+              # arjuna needs access to a writable directory to write temporary files
+              # Will be fixed upstream in https://github.com/keycloak/keycloak/issues/21456
+              - name: QUARKUS_TRANSACTION_MANAGER_OBJECT_STORE_DIRECTORY
+                value: /tmp
 {{ if .Values.otel }}
               # Instrumentation for the HTTP/2 protocol doesn't work yet - no metrics will be available, probably also no tracing
               # As a workaround, force downgrade to HTTP/1.1

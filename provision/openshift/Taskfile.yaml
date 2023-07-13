@@ -219,7 +219,7 @@ tasks:
         ../minikube/keycloak
       - >
         bash -c '
-        if [ "{{.KC_DATABASE}}" != "none" ];
+        if [ "{{.KC_DATABASE}}" == "postgres" ];
         then kubectl get deployment/{{.KC_DATABASE}} -n {{.KC_NAMESPACE_PREFIX}}keycloak -o=jsonpath="{.spec}" > .task/status-{{.TASK}}-db.json;
         else echo "none" > .task/status-{{.TASK}}-db.json;
         fi'
