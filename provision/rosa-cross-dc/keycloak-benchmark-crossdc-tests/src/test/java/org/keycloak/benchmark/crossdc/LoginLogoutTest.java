@@ -1,10 +1,24 @@
 package org.keycloak.benchmark.crossdc;
 
 import org.junit.jupiter.api.Test;
+import org.keycloak.benchmark.crossdc.client.KeycloakClient;
+import org.keycloak.benchmark.crossdc.util.HttpClientUtils;
+import org.keycloak.benchmark.crossdc.util.KeycloakUtils;
+import org.keycloak.common.util.Time;
+import org.keycloak.representations.idm.ClientRepresentation;
 
 import java.io.IOException;
+import java.net.CookieManager;
+import java.net.HttpCookie;
 import java.net.URISyntaxException;
+import java.net.http.HttpResponse;
+import java.util.List;
 import java.util.Map;
+import java.util.Queue;
+import java.util.Random;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -56,5 +70,71 @@ public class LoginLogoutTest extends AbstractCrossDCTest {
         assertEquals(0, DC_2.ispn().cache(SESSIONS).size());
         //Verify session cache size in embedded ISPN DC2
         assertEquals(0, DC_2.kc().embeddedIspn().cache(SESSIONS).size());
+    }
+
+    @Test
+    public void testConcurrentClientSessionAddition() throws IOException, URISyntaxException, InterruptedException {
+        // Create clients in DC1
+        for (int i = 0; i < 100; i++) {
+            // Create client
+            ClientRepresentation client = new ClientRepresentation();
+            client.setEnabled(Boolean.TRUE);
+            client.setClientId("client-" + i);
+            client.setSecret(CLIENT_SECRET);
+            client.setRedirectUris(List.of("*"));
+            client.setDirectAccessGrantsEnabled(true);
+            client.setProtocol("openid-connect");
+            DC_1.kc().adminClient().realm(REALM_NAME).clients().create(client);
+        }
+
+        // Create user session with the main client in DC1
+        String code = LOAD_BALANCER_KEYCLOAK.usernamePasswordLogin(REALM_NAME, USERNAME, MAIN_PASSWORD, CLIENTID);
+        String userSessionId = code.split("[.]")[1];
+
+        Map<String, Object> tokensMap = LOAD_BALANCER_KEYCLOAK.exchangeCode(REALM_NAME, CLIENTID, CLIENT_SECRET, 200, code);
+
+        // Create cookies also for the other DCs URLS so we can login to the same user session from DC_1 and DC_2 Urls
+        CookieManager mockCookieManager = HttpClientUtils.MOCK_COOKIE_MANAGER;
+        List<HttpCookie> copy = List.copyOf(mockCookieManager.getCookieStore().getCookies());
+        copy.forEach(cookie -> {
+            if (cookie.getDomain().startsWith("client.")) {
+                mockCookieManager.getCookieStore().add(null, createCookie(cookie, DC_1.kc().getKeycloakServerUrl().substring("https://".length())));
+                mockCookieManager.getCookieStore().add(null, createCookie(cookie, DC_2.kc().getKeycloakServerUrl().substring("https://".length())));
+            }
+        });
+
+        AtomicInteger counter = new AtomicInteger(0);
+        Queue<Long> times = new ConcurrentLinkedQueue<>();
+
+        Random rand = new Random();
+
+        // Create new client session with each client in DC1
+        IntStream.range(0, 5000).parallel().forEach(i -> {
+            // Create new client session with each client in DC1
+            HttpResponse<String> stringHttpResponse = null;
+            try {
+                long start = Time.currentTimeMillis();
+                KeycloakClient keycloakClient = rand.nextBoolean() ? DC_1.kc() : DC_2.kc();
+                stringHttpResponse = keycloakClient.openLoginForm(REALM_NAME, "client-" + counter.getAndIncrement() % 100);
+                times.add(Time.currentTimeMillis() - start);
+            } catch (IOException | InterruptedException | URISyntaxException e) {
+                throw new RuntimeException(e);
+            }
+            String code2 = KeycloakUtils.extractCodeFromResponse(stringHttpResponse);
+            String userSessionId2 = code2.split("[.]")[1];
+            assertEquals(userSessionId, userSessionId2);
+        });
+
+        times.forEach(System.out::println);
+    }
+
+    private HttpCookie createCookie(HttpCookie oldCookie, String domain) {
+        HttpCookie cookie = new HttpCookie(oldCookie.getName(), oldCookie.getValue());
+        cookie.setDomain(domain);
+        cookie.setPath(oldCookie.getPath());
+        cookie.setVersion(oldCookie.getVersion());
+        cookie.setSecure(oldCookie.getSecure());
+        cookie.setHttpOnly(oldCookie.isHttpOnly());
+        return cookie;
     }
 }

@@ -10,9 +10,15 @@ import java.net.InetAddress;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.UnknownHostException;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 public class KeycloakUtils {
     public static ResteasyClientBuilder newResteasyClientBuilder() {
@@ -67,5 +73,25 @@ public class KeycloakUtils {
 
     public static String URIToHostString(String uri) {
         return URI.create(uri).getHost().toString();
+    }
+
+    public static String getLoginFormActionURL(HttpResponse<String> response) {
+        Pattern pattern = Pattern.compile("action=\"([^\"]*)\"");
+        Matcher matcher = pattern.matcher(response.body());
+        if (matcher.find()) {
+            return matcher.group(1).replaceAll("&amp;", "&");
+        }
+
+        return null;
+    }
+
+    public static String extractCodeFromResponse(HttpResponse<String> response) {
+        // first redirect
+        String location = response.headers().firstValue("Location").orElse(null);
+        assertNotNull(location);
+        assertEquals(302, response.statusCode());
+
+        // capture code parameter
+        return location.substring(location.indexOf("code=") + 5);
     }
 }
