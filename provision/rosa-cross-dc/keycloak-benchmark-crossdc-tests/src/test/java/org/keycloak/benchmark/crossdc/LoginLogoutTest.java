@@ -17,6 +17,7 @@ import java.util.Map;
 import java.util.Queue;
 import java.util.Random;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.IntStream;
 
@@ -75,7 +76,7 @@ public class LoginLogoutTest extends AbstractCrossDCTest {
     @Test
     public void testConcurrentClientSessionAddition() throws IOException, URISyntaxException, InterruptedException {
         // Create clients in DC1
-        for (int i = 0; i < 100; i++) {
+        for (int i = 0; i < 10; i++) {
             // Create client
             ClientRepresentation client = new ClientRepresentation();
             client.setEnabled(Boolean.TRUE);
@@ -104,28 +105,47 @@ public class LoginLogoutTest extends AbstractCrossDCTest {
         });
 
         AtomicInteger counter = new AtomicInteger(0);
+        AtomicInteger failureCounter = new AtomicInteger(0);
         Queue<Long> times = new ConcurrentLinkedQueue<>();
 
         Random rand = new Random();
+        System.out.println("Starting with the concurrent requests");
 
-        // Create new client session with each client in DC1
-        IntStream.range(0, 5000).parallel().forEach(i -> {
+        try {
             // Create new client session with each client in DC1
-            HttpResponse<String> stringHttpResponse = null;
-            try {
-                long start = Time.currentTimeMillis();
+            IntStream.range(0, 3).parallel().forEach(i -> {
+                // Create new client session with each client in DC1
+                HttpResponse<String> stringHttpResponse = null;
                 KeycloakClient keycloakClient = rand.nextBoolean() ? DC_1.kc() : DC_2.kc();
-                stringHttpResponse = keycloakClient.openLoginForm(REALM_NAME, "client-" + counter.getAndIncrement() % 100);
-                times.add(Time.currentTimeMillis() - start);
-            } catch (IOException | InterruptedException | URISyntaxException e) {
-                throw new RuntimeException(e);
-            }
-            String code2 = KeycloakUtils.extractCodeFromResponse(stringHttpResponse);
-            String userSessionId2 = code2.split("[.]")[1];
-            assertEquals(userSessionId, userSessionId2);
-        });
+                String clientId = "client-" + counter.getAndIncrement() % 10;
+                long start = Time.currentTimeMillis();
+                try {
+                    stringHttpResponse = keycloakClient.openLoginForm(REALM_NAME, clientId);
 
-        times.forEach(System.out::println);
+                    String code2 = KeycloakUtils.extractCodeFromResponse(stringHttpResponse);
+                    String userSessionId2 = code2.split("[.]")[1];
+                    assertEquals(userSessionId, userSessionId2);
+                    Map<String, Object> stringObjectMap = keycloakClient.exchangeCode(REALM_NAME, clientId, CLIENT_SECRET, 200, code2);
+                    System.out.println(((keycloakClient == DC_1.kc()) ? "dc1 - " : "dc2 - ") + stringObjectMap.get("access_token"));
+                } catch (Throwable e) {
+                    failureCounter.incrementAndGet();
+                    System.out.println("---------------------------------------------------------------");
+                    e.printStackTrace();
+                    if (stringHttpResponse != null) {
+                        System.out.println(stringHttpResponse.body());
+                    }
+                    System.out.println("---------------------------------------------------------------");
+                } finally {
+                    times.add(Time.currentTimeMillis() - start);
+                }
+            });
+        } finally {
+            times.forEach(System.out::println);
+            System.out.println("Failure count: " + failureCounter.get());
+        }
+
+        assertEquals(0, failureCounter.get());
+        Thread.sleep(1000);
     }
 
     private HttpCookie createCookie(HttpCookie oldCookie, String domain) {

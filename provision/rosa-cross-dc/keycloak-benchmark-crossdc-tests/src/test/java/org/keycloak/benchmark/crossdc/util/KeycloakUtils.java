@@ -88,8 +88,8 @@ public class KeycloakUtils {
     public static String extractCodeFromResponse(HttpResponse<String> response) {
         // first redirect
         String location = response.headers().firstValue("Location").orElse(null);
-        assertNotNull(location);
         assertEquals(302, response.statusCode());
+        assertNotNull(location);
 
         // capture code parameter
         return location.substring(location.indexOf("code=") + 5);
