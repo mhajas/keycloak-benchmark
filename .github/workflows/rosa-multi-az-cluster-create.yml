@@ -19,6 +19,9 @@ on:
       keycloakBranch:
         description: 'The branch to deploy Keycloak from. If not set nightly image is used'
         type: string
+      namespacePrefix:
+        description: 'The prefix to be used when creating the namespaces'
+        type: string
   workflow_call:
     inputs:
       clusterPrefix:
@@ -36,6 +39,9 @@ on:
         type: string
       keycloakBranch:
         description: 'The branch to deploy Keycloak from. If not set nightly image is used'
+        type: string
+      namespacePrefix:
+        description: 'The prefix to be used when creating the namespaces'
         type: string
 
 env:
@@ -138,3 +144,4 @@ jobs:
           MULTI_AZ: "true"
           KC_REPOSITORY: ${{ inputs.keycloakRepository }}
           KC_BRANCH: ${{ inputs.keycloakBranch }}
+          KC_NAMESPACE_PREFIX: ${{ inputs.namespacePrefix }}

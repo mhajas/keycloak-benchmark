@@ -6,12 +6,20 @@ on:
       clusterPrefix:
         description: 'The prefix used when creating the Cross DC clusters'
         type: string
+      namespace:
+        description: 'The namespace where the Cross DC clusters are deployed'
+        type: string
+        default: "runner-keycloak"
 
   workflow_dispatch:
     inputs:
       clusterPrefix:
         description: 'The prefix used when creating the Cross DC clusters'
         type: string
+      namespace:
+        description: 'The namespace where the Cross DC clusters are deployed'
+        type: string
+        default: "runner-keycloak"
 
 concurrency:
   # Only run once for the latest commit per ref and cancel other (previous) runs.
@@ -19,7 +27,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  PROJECT: runner-keycloak
+  PROJECT: ${{ inputs.namespace }}
 
 jobs:
   run-tests:
