@@ -20,6 +20,7 @@ package org.keycloak.benchmark.cache;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Stream;
 
 import jakarta.ws.rs.GET;
@@ -29,12 +30,18 @@ import jakarta.ws.rs.Produces;
 
 import org.infinispan.Cache;
 import org.infinispan.client.hotrod.RemoteCache;
+import org.infinispan.commons.api.BasicCache;
 import org.infinispan.manager.EmbeddedCacheManager;
+import org.jboss.logging.Logger;
 import org.jboss.resteasy.annotations.cache.NoCache;
 import org.keycloak.benchmark.dataset.TaskResponse;
 import org.keycloak.connections.infinispan.InfinispanConnectionProvider;
 import org.keycloak.connections.infinispan.InfinispanUtil;
 import org.keycloak.models.KeycloakSession;
+import org.keycloak.models.sessions.infinispan.changes.SessionEntityWrapper;
+import org.keycloak.models.sessions.infinispan.entities.AuthenticatedClientSessionEntity;
+import org.keycloak.models.sessions.infinispan.entities.AuthenticatedClientSessionStore;
+import org.keycloak.models.sessions.infinispan.entities.UserSessionEntity;
 import org.keycloak.services.resource.RealmResourceProvider;
 import org.keycloak.utils.MediaType;
 
@@ -62,6 +69,8 @@ public class CacheResourceProvider implements RealmResourceProvider {
     private static final String[] CACHE_NAMES = Stream.of(CORE_CACHE_NAMES, SESSION_CACHE_NAMES).flatMap(Stream::of).toArray(String[]::new);
 
     private final KeycloakSession session;
+
+    private static final Logger LOG = Logger.getLogger(CacheResourceProvider.class);
 
     public CacheResourceProvider(KeycloakSession session) {
         this.session = session;
@@ -113,6 +122,48 @@ public class CacheResourceProvider implements RealmResourceProvider {
     @Path("/{cache}")
     public CacheResource getCacheResource(@PathParam("cache") String cacheName) {
         return new CacheResource(session, cacheName);
+    }
+
+    @Path("/print-sessions")
+    public void print() {
+        InfinispanConnectionProvider provider = session.getProvider(InfinispanConnectionProvider.class);
+
+        StringBuilder log = new StringBuilder("User sessions:").append("\n");
+        try {
+            Cache<String, SessionEntityWrapper<UserSessionEntity>> cache = provider.getCache("sessions");
+            Cache<UUID, SessionEntityWrapper<AuthenticatedClientSessionEntity>> clientCache = provider.getCache("clientSessions");
+
+            RemoteCache<String, SessionEntityWrapper<UserSessionEntity>> remoteCache = InfinispanUtil.getRemoteCache(cache);
+            RemoteCache<UUID, SessionEntityWrapper<AuthenticatedClientSessionEntity>> remoteClientCache = InfinispanUtil.getRemoteCache(clientCache);
+
+
+            log.append("Local ------------------------").append("\n");
+            for (String key : cache.keySet()) {
+                log.append(key).append(" -> ").append(getClientSessionsMappings(cache.get(key), clientCache)).append("\n");
+            }
+            log.append("------------------------").append("\n");
+
+            log.append("Remote ------------------------").append("\n");
+            for (String key : remoteCache.keySet()) {
+                log.append(key).append(" -> ").append(getClientSessionsMappings(cache.get(key), remoteClientCache)).append("\n");
+            }
+            log.append("------------------------").append("\n");
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+
+        LOG.info(log.toString());
+    }
+
+    public String getClientSessionsMappings(SessionEntityWrapper<UserSessionEntity> userSession, BasicCache<UUID, SessionEntityWrapper<AuthenticatedClientSessionEntity>> clientCache) {
+        AuthenticatedClientSessionStore authenticatedClientSessions = userSession.getEntity().getAuthenticatedClientSessions();
+
+        StringBuilder log = new StringBuilder("[");
+        for (String key : authenticatedClientSessions.keySet()) {
+            UUID clientSessionId = authenticatedClientSessions.get(key);
+            log.append(key).append(" -> ").append(clientSessionId).append("-{").append(clientCache.get(clientSessionId).getEntity().getClientId()).append("}").append(", ");
+        }
+        return log.append("]").toString();
     }
 
     @Override

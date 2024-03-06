@@ -249,6 +249,17 @@ public class KeycloakClient {
         return keycloakServerUrl;
     }
 
+    public void printSessions() throws URISyntaxException, IOException, InterruptedException {
+        URI uri = new URIBuilder( testRealmUrl("master") + "/cache/print-sessions").build();
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(uri)
+                .GET()
+                .build();
+
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        System.out.println(response.statusCode());
+    }
+
     public InfinispanClient embeddedIspn() {
         return new InfinispanClient() {
             @Override
