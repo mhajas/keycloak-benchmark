@@ -11,6 +11,11 @@ variable "aurora" {
     name = string
     region = optional(string)
   })
+
+  default = {
+    name = "mhajas_aurora"
+    region = "eu-west-2"
+  }
 }
 
 
