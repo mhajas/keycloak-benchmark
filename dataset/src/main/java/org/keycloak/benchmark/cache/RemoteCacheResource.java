@@ -18,16 +18,22 @@
 
 package org.keycloak.benchmark.cache;
 
+import java.util.LinkedList;
+import java.util.List;
 import java.util.UUID;
 
+import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 
+import jakarta.ws.rs.QueryParam;
 import org.infinispan.Cache;
+import org.infinispan.client.hotrod.MetadataValue;
 import org.infinispan.client.hotrod.RemoteCache;
+import org.infinispan.client.hotrod.exceptions.HotRodClientException;
 import org.infinispan.commons.CacheConfigurationException;
 import org.jboss.logging.Logger;
 import org.jboss.resteasy.annotations.cache.NoCache;
@@ -93,5 +99,35 @@ public class RemoteCacheResource {
         } else {
             return false;
         }
+    }
+
+    @Path("/test-concurrent-update")
+    @Produces({"application/json"})
+    @GET
+    @NoCache
+    public List<Long> getTestConcurrentUpdateResource(@QueryParam("iterations") @DefaultValue("1000") int iterations, @QueryParam("entry") @DefaultValue("1") String entry) {
+        List<Long> result = new LinkedList();
+
+        for(int i = 0; i < iterations; ++i) {
+            MetadataValue withMetadata = remoteCache.getWithMetadata(entry);
+            if (withMetadata == null) {
+                remoteCache.putIfAbsent(entry, 1);
+                continue;
+            }
+            long oldVersion = withMetadata.getVersion();
+            Integer value = (Integer) withMetadata.getValue();
+            logger.infof("Read version %s with value %d", oldVersion, value);
+            try {
+                if (remoteCache.replaceWithVersion(entry, value + 1, oldVersion)) {
+
+                    logger.infof("Successfully updated version %s", oldVersion);
+                    result.add(oldVersion);
+                }
+            } catch (HotRodClientException ex) {
+                // Ignore
+            }
+        }
+
+        return result;
     }
 }

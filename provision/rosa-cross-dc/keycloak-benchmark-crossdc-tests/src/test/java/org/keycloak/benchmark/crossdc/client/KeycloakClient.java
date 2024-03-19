@@ -277,6 +277,16 @@ public class KeycloakClient {
                     public Set<String> keys() {
                         throw new NotImplementedYetException("This is not yet implemented :/");
                     }
+
+                    @Override
+                    public Set<Integer> startConcurrentUpdates(int iterations) throws URISyntaxException, IOException, InterruptedException {
+                        URI uri = (new URIBuilder(testRealmUrl("master") + "/remote-cache/" + name + "/test-concurrent-update?iterations=" + iterations)).build();
+                        HttpRequest request = HttpRequest.newBuilder().uri(uri).GET().build();
+
+                        HttpResponse<String> response = KeycloakClient.this.httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+                        System.out.println("Response: " + response.body());
+                        return (Set)JsonSerialization.readValue(response.body(), Set.class);
+                    }
                 };
             }
         };
