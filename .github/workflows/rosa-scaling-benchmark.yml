@@ -218,7 +218,7 @@ jobs:
           ./benchmark.sh ${{ inputs.region }}
           --scenario=keycloak.scenario.authentication.AuthorizationCode
           --server-url=${{ env.KEYCLOAK_URL }}
-          --realm-name=realm-1
+          --realm-name=realm-0
           --users-per-sec=${{ inputs.numberOfUsersPerSecond }}
           --ramp-up=20
           --logout-percentage=100
