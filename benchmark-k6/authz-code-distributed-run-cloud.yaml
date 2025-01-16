@@ -1,0 +1,21 @@
+apiVersion: k6.io/v1alpha1
+kind: TestRun
+metadata:
+  name: run-k6-from-configmap
+spec:
+  parallelism: 5
+  script:
+    configMap:
+      name: authorization-code
+      file: authorization-code.js
+  arguments: '--out cloud'
+  runner:
+    env:
+      - name: KEYCLOAK_URL
+        value: '<KEYCLOAK_URL_HERE>'
+
+# https://grafana.com/docs/k6/latest/set-up/set-up-distributed-k6/usage/k6-operator-to-gck6/
+# this requires grafana cloud token to be configured for operator with the following command
+# kubectl -n k6-operator-system create secret generic my-cloud-token \
+#    --from-literal=token=<COPY YOUR TOKEN HERE> && kubectl -n k6-operator-system label secret my-cloud-token "k6cloud=token"
+

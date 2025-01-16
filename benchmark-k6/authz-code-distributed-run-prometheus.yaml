@@ -1,0 +1,21 @@
+apiVersion: k6.io/v1alpha1
+kind: TestRun
+metadata:
+  name: run-k6-from-configmap
+spec:
+  parallelism: 5
+  script:
+    configMap:
+      name: authorization-code
+      file: authorization-code.js
+  arguments: '--tag testid=KeycloakFirstTest'
+  runner:
+    env:
+      - name: KEYCLOAK_URL
+        value: '<KEYCLOAK_URL_HERE>'
+      - name: K6_OUT
+        value: 'experimental-prometheus-rw'
+      - name: K6_PROMETHEUS_RW_SERVER_URL
+        value: 'http://prometheus-kube-prometheus-prometheus.monitoring2.svc:9090/api/v1/write'
+      - name: K6_PROMETHEUS_RW_TREND_AS_NATIVE_HISTOGRAM
+        value: 'true'
