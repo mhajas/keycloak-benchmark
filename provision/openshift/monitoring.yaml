@@ -1,0 +1,149 @@
+# https://github.com/prometheus-community/helm-charts/blob/main/charts/kube-prometheus-stack/values.yaml
+
+namespaceOverride: monitoring2
+
+grafana:
+  image:
+    registry: mirror.gcr.io
+  namespaceOverride: monitoring2
+  adminPassword: keycloak
+  sidecar:
+    datasources:
+      enabled: false
+      defaultDatasourceEnabled: false
+  # values in dependent chart / https://github.com/grafana/helm-charts/blob/main/charts/grafana/values.yaml
+  grafana.ini:
+    snapshots:
+      external_enabled: false
+  ingress:
+    enabled: true
+    hosts:
+      # set this via the CLI
+      - grafana.apps.hostname
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: ...
+    runAsGroup: ...
+    fsGroup: ...
+  datasources:
+    datasources.yaml:
+      apiVersion: 1
+      datasources:
+        - name: Prometheus
+          uid: PBFA97CFB590B2093
+          type: prometheus
+          url: https://thanos-querier.openshift-monitoring.svc:9091
+          access: proxy
+          isDefault: true
+          editable: false
+          jsonData:
+            timeInterval: 30s
+            httpHeaderName1: Authorization
+            tlsSkipVerify: true
+            httpMethod: "POST"
+          secureJsonData:
+            httpHeaderValue1: Bearer $__file{/etc/secrets/grafanaserviceaccount/token}
+        - name: Jaeger
+          uid: PC9A941E8F2E49454
+          type: jaeger
+          url: "http://jaeger-query.monitoring.svc:16686"
+          access: proxy
+          isDefault: false
+          editable: false
+          jsonData:
+            tracesToLogs:
+              datasourceUid: P8E80F9AEF21F6940
+              filterByTraceID: true,
+              mapTagNamesEnabled: true
+              mappedTags:
+                - key: "hostname"
+                  value: "pod"
+              spanStartTimeShift: "-1h"
+              spanEndTimeShift: "1h"
+        - name: Prometheus K6
+          uid: PBFA97CFB590B2094
+          type: prometheus
+          url: http://prometheus-kube-prometheus-prometheus.monitoring2:9090/
+          access: proxy
+          isDefault: false
+          editable: false
+          jsonData:
+            timeInterval: 30s
+            exemplarTraceIdDestinations:
+              - datasourceUid: PC9A941E8F2E49454
+                name: trace_id
+  extraSecretMounts:
+    - name: grafana-sa-secret
+      secretName: grafana-sa-secret
+      mountPath: /etc/secrets/grafanaserviceaccount
+      readOnly: true
+  serviceAccount:
+    create: false
+    name: grafana
+
+kube-state-metrics:
+  namespaceOverride: monitoring2
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: ...
+    runAsGroup: ...
+    fsGroup: ...
+
+prometheus-node-exporter:
+  namespaceOverride: monitoring2
+
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeEtcd:
+  enabled: false
+kubelet:
+  cAdvisor:
+    # remove embedded cAdvisor metrics as they are unreliable and have gaps
+    # (at least on minikube on Linux with podman/cri-o
+    enabled: false
+
+prometheusOperator:
+  enabled: true
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: ...
+    runAsGroup: ...
+    fsGroup: ...
+  admissionWebhooks:
+    patch:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: ...
+        runAsGroup: ...
+        fsGroup: ...
+
+prometheus:
+  prometheusSpec:
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: ...
+      runAsGroup: ...
+      fsGroup: ...
+    enableRemoteWriteReceiver: true
+    enableFeatures:
+      - exemplar-storage
+      - remote-write-receiver
+      - native-histograms
+    podMonitorSelector: {}
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelector: {}
+    ruleSelectorNilUsesHelmValues: false
+    serviceMonitorSelector: {}
+    serviceMonitorSelectorNilUsesHelmValues: false
+    retention: 60d
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: gp3-csi
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 1Gi
+

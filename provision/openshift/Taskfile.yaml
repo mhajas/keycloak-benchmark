@@ -154,6 +154,39 @@ tasks:
       - .task/var-KC_HOSTNAME_SUFFIX
       - grafana.yaml
 
+  monitoring-for-k6:
+    cmds:
+      - kubectl create namespace monitoring2 || true
+      - # this creates the service account outside the Helm chart to be able to create the token which is later an input of the Helm change
+      - oc create sa grafana -n monitoring2 || exit 0
+      - oc adm policy add-cluster-role-to-user cluster-monitoring-view -z grafana -n monitoring2
+      - kubectl get project/monitoring2 -o jsonpath='{.metadata.annotations.openshift\.io/sa\.scc\.uid-range}' |  cut -f1 -d"/" > .task/monitoring-uids
+      - kubectl apply -f grafana-sa-secret.yaml -n monitoring2
+      - helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+      - helm repo update
+      - >
+        helm -n monitoring2 upgrade --install prometheus prometheus-community/kube-prometheus-stack --version 67.9.0 -f monitoring.yaml
+        --set grafana.ingress.hosts[0]=grafana2.{{ .KC_HOSTNAME_SUFFIX }}
+        --set grafana.ingress.annotations."route\.openshift\.io/termination"=edge
+        --set grafana.ingress.annotations."route\.openshift\.io/insecureEdgeTerminationPolicy"=Redirect
+        --set grafana.securityContext.runAsUser=$(cat .task/monitoring-uids)
+        --set grafana.securityContext.runAsGroup=$(cat .task/monitoring-uids)
+        --set grafana.securityContext.fsGroup=$(cat .task/monitoring-uids)
+        --set prometheus.prometheusSpec.securityContext.runAsUser=$(cat .task/monitoring-uids)
+        --set prometheus.prometheusSpec.securityContext.runAsGroup=$(cat .task/monitoring-uids)
+        --set prometheus.prometheusSpec.securityContext.fsGroup=$(cat .task/monitoring-uids)
+        --set prometheusOperator.admissionWebhooks.patch.securityContext.runAsUser=$(cat .task/monitoring-uids)
+        --set prometheusOperator.admissionWebhooks.patch.securityContext.runAsGroup=$(cat .task/monitoring-uids)
+        --set prometheusOperator.admissionWebhooks.patch.securityContext.fsGroup=$(cat .task/monitoring-uids)
+        --set prometheusOperator.securityContext.runAsUser=$(cat .task/monitoring-uids)
+        --set prometheusOperator.securityContext.runAsGroup=$(cat .task/monitoring-uids)
+        --set prometheusOperator.securityContext.fsGroup=$(cat .task/monitoring-uids)
+        --set kube-state-metrics.securityContext.runAsUser=$(cat .task/monitoring-uids)
+        --set kube-state-metrics.securityContext.runAsGroup=$(cat .task/monitoring-uids)
+        --set kube-state-metrics.securityContext.fsGroup=$(cat .task/monitoring-uids)
+        --set grafana.adminPassword="{{ .KC_ADMIN_PASSWORD }}"
+      - echo "Grafana instance is available at https://grafana2.{{.KC_HOSTNAME_SUFFIX}}"
+
   monitoring:
     deps:
       - common:split
